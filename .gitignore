@@ -1,0 +1,12 @@
+# cocotb / simulation
+sim_build/
+results.xml
+*.vcd
+*.fst
+__pycache__/
+.pytest_cache/
+
+# synthesis outputs
+synth/build/
+
+.vscode/
