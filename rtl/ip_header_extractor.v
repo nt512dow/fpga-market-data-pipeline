@@ -21,7 +21,7 @@ module ip_header_extractor #(parameter BEAT_SIZE = 64) (
     output reg [3:0] ip_header_length,
     output reg [7:0] differentiated_service_field,
 
-    output reg [15:0] total_length,
+    output reg [15:0] ip_udp_payload_length,
     output reg [15:0] identification,
     output reg [15:0] fragmentation,
     output reg [7:0] time_to_live,
@@ -35,14 +35,14 @@ module ip_header_extractor #(parameter BEAT_SIZE = 64) (
     output reg ok_ip
 );
 // contract
-// Captured fields (valid while ip_valid=1): protocol, src_ip, dst_ip, total_length
+// Captured fields (valid while ip_valid=1): protocol, src_ip, dst_ip, ip_udp_payload_length
 // valid_ip : rises with ok_ip (the cycle after beat 4 is transferred), stays high until next frame's beat 0
 //            asserts whether the relevant fields have bits we want to keep
 // ok_ip    : meaningful only while ip_valid=1. 1 iff ethertype==0x0800, version==4, IHL==5,
 //            not fragmented, protocol==17, checksum correct.
 //            asserts if all those fields are correct
 // Stalls   : counters advance only on tvalid && tready
-// Bad frame: stream still passes; ip_ok=0; downstream must discard.
+// Bad frame: stream still passes; ok_ip=0; downstream must discard.
 
     //pass through 
     assign m_axis_tdata  = s_axis_tdata;
@@ -109,7 +109,7 @@ module ip_header_extractor #(parameter BEAT_SIZE = 64) (
     
     //beat 2
     initial begin 
-        total_length = 0;
+        ip_udp_payload_length = 0;
         identification = 0;
         fragmentation = 0;
         time_to_live = 0;
@@ -117,14 +117,14 @@ module ip_header_extractor #(parameter BEAT_SIZE = 64) (
     end
     always @(posedge clk) begin
         if (reset) begin 
-            total_length <= 0;
+            ip_udp_payload_length <= 0;
             identification <= 0;
             fragmentation <= 0;
             time_to_live <= 0;
             protocol <= 0;
         end else if (transfer_happening) begin
             if (beat_count == 2) begin 
-                total_length <= {s_axis_tdata[7:0], s_axis_tdata[15:8]};
+                ip_udp_payload_length <= {s_axis_tdata[7:0], s_axis_tdata[15:8]};
                 identification <= {s_axis_tdata[23:16], s_axis_tdata[31:24]};
                 fragmentation <= {s_axis_tdata[39:32], s_axis_tdata[47:40]};
                 time_to_live <= {s_axis_tdata[55:48]};
@@ -165,28 +165,6 @@ module ip_header_extractor #(parameter BEAT_SIZE = 64) (
         end
     end
 
-    function automatic [15:0] one_complement_addition;
-        input [15:0] a, b;
-        reg [16:0] add_temp;
-        begin
-            add_temp = a + b;
-            if (add_temp[16] & 1'b1) begin
-                add_temp = add_temp + 1;
-            end
-            
-            one_complement_addition = add_temp[15:0];
-        end
-    endfunction
-
-    function automatic [15:0] five_input_one_complement_addition;
-        input [15:0] a, b, c, d, e;
-        five_input_one_complement_addition = one_complement_addition(a,
-            one_complement_addition(b,
-            one_complement_addition(c,
-            one_complement_addition(d, e))));
-
-    endfunction
-
     wire [15:0] w0;
     wire [15:0] w1;
     wire [15:0] w2;
@@ -225,7 +203,6 @@ module ip_header_extractor #(parameter BEAT_SIZE = 64) (
     end
 
     wire [16:0] fold_one;
-    wire [15:0] fold_two;
     wire ok_checksum;
     
     assign fold_one = checksum[15:0] + checksum[20:16];

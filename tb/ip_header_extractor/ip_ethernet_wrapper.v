@@ -24,7 +24,7 @@ module ip_ethernet_wrapper #(parameter BEAT_SIZE = 64) (
     output reg [3:0] ip_header_length,
     output reg [7:0] differentiated_service_field,
 
-    output reg [15:0] total_length,
+    output reg [15:0] ip_udp_payload_length,
     output reg [15:0] identification,
     output reg [15:0] fragmentation,
     output reg [7:0] time_to_live,
@@ -88,7 +88,7 @@ module ip_ethernet_wrapper #(parameter BEAT_SIZE = 64) (
         .ip_header_length(ip_header_length),
         .differentiated_service_field(differentiated_service_field),
 
-        .total_length(total_length),
+        .ip_udp_payload_length(ip_udp_payload_length),
         .identification(identification),
         .fragmentation(fragmentation),
         .time_to_live(time_to_live),
