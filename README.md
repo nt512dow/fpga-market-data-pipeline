@@ -1,6 +1,6 @@
 # A Simple FPGA Market Data Pipeline
 
-# Testing the Skid Buffer Module
+# Skid Buffer Tests
 
 All run with DATA_WIDTH=64 using Yosys and ECP5, combinational input-to-output paths are not included in Fmax numbers.
 |                             | LUT4s | FFs | Fmax after Routing/MHz | Critical Path           |
@@ -10,3 +10,14 @@ All run with DATA_WIDTH=64 using Yosys and ECP5, combinational input-to-output p
 | OPT_OUTREG=1 OPT_LOWPOWER=0 | 69    | 130 | 372.02                 | r_valid to o_data       |
 | OPT_OUTREG=1 OPT_LOWPOWER=1 | 71    | 130 | 337.61                 | r_valid to r_data       |
 
+# Ethernet Header Extractor Tests
+
+| LUT4s | FFs | Fmax after Routing/MHz | Critical Path             |
+|-------|-----|------------------------|---------------------------|
+| 17    | 115 | 367.92                 | beat_count to source_MAC  |
+
+# Ethernet and IP Header Extractor Tests
+
+| LUT4s | FFs | Fmax after Routing/MHz | Critical Path             |
+|-------|-----|------------------------|---------------------------|
+| 314   | 302 | 154.44                 | checksum to checksum      |

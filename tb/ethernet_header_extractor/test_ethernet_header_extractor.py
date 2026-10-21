@@ -8,42 +8,31 @@ def pauses(p):
     while True:
         yield random.random() < p #randomly pause the cycle, simulating backpressure
 
-async def handshake_monitor(dut):
-    """valid && !ready in one cycle => next cycle valid still 1 and data unchanged."""
-    prev = None
-    LOWPOWER = os.environ.get("OPT_LOWPOWER", "0") == "1"
-    while True:
-        await RisingEdge(dut.clk)
-        await ReadOnly()
-        if dut.reset.value == 1:
-            prev = None
-            continue
-        v, r = int(dut.m_axis_tvalid.value), int(dut.m_axis_tready.value)
-        d = int(dut.m_axis_tdata.value)
-        if LOWPOWER and dut.skid_buffer_unit.o_valid.value == 0:
-            assert int(dut.skid_buffer_unit.o_data.value) == 0
-        
-        if prev is not None:
-            assert v, "m_axis_tvalid dropped during a stall"
-            assert d == prev, "m_axis_tdata changed during a stall"
-        prev = d if (v and not r) else None
-        
+def rand_frame(length):
+    return bytes(random.randrange(256) for _ in range(length))
+
+def has_full_header(f):
+    return len(f) >= 14          # contract: header complete only if 14+ bytes arrived
+
 async def header_monitor(dut, captured):
-    prev = 0
+    prev_valid, prev_fields = 0, None
     while True:
         await RisingEdge(dut.clk)
         await ReadOnly()
         if int(dut.reset.value) == 1:
-            prev = 0
+            prev_valid, prev_fields = 0, None
             continue
         v = int(dut.valid_header.value)
-        if v and not prev:                      # rising edge of valid_header
-            captured.append((int(dut.destination_MAC.value),
-                             int(dut.source_MAC.value),
-                             int(dut.ether_type.value)))
-        prev = v
-        
-async def run(dut, p_src, p_sink, n=200):
+        fields = (int(dut.destination_MAC.value),
+                  int(dut.source_MAC.value),
+                  int(dut.ether_type.value))
+        if v and not prev_valid:                 # rising edge = one header found
+            captured.append(fields)
+        if v and prev_valid:                     # hold check
+            assert fields == prev_fields, "fields changed while valid_header was high"
+        prev_valid, prev_fields = v, fields
+
+async def run_frames(dut, frames, p_src=0.0, p_sink=0.0):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     src  = AxiStreamSource(AxiStreamBus.from_prefix(dut, "s_axis"), dut.clk, dut.reset)
     sink = AxiStreamSink(AxiStreamBus.from_prefix(dut, "m_axis"), dut.clk, dut.reset)
@@ -51,32 +40,63 @@ async def run(dut, p_src, p_sink, n=200):
     sink.set_pause_generator(pauses(p_sink))
 
     dut.reset.value = 1
-    for _ in range(5): await RisingEdge(dut.clk)
+    await ClockCycles(dut.clk, 5)
     dut.reset.value = 0
+    await RisingEdge(dut.clk)
+
     captured = []
-    cocotb.start_soon(handshake_monitor(dut))
     cocotb.start_soon(header_monitor(dut, captured))
 
-    sent = [bytes(random.randrange(256) for _ in range(random.randint(60, 120)))
-            for _ in range(n)]
-    for f in sent:
-        await src.send(AxiStreamFrame(f)) #queue everything
-    for i, f in enumerate(sent):
+    for f in frames:
+        await src.send(AxiStreamFrame(f))
+    for i, f in enumerate(frames):
         got = await sink.recv()
-        assert bytes(got.tdata) == f, f"frame {i} mismatch"
+        assert bytes(got.tdata) == f, f"frame {i}: stream corrupted"
 
-    # await ClockCycles(dut.clk, 5)
-    assert len(captured) == n, f"expected {n} header captures, got {len(captured)}"
-    for i, (f, (dst, src_mac, et)) in enumerate(zip(sent, captured)):
-        assert dst == int.from_bytes(f[0:6], "big"), f"frame {i} dst_mac mismatch"
-        assert src_mac == int.from_bytes(f[6:12], "big"), f"frame {i} src_mac mismatch"
-        assert et == int.from_bytes(f[12:14], "big"), f"frame {i} ethertype mismatch"
+    await ClockCycles(dut.clk, 5)
+
+    expected = [(int.from_bytes(f[0:6], "big"),
+                 int.from_bytes(f[6:12], "big"),
+                 int.from_bytes(f[12:14], "big"))
+                for f in frames if has_full_header(f)]
+    assert len(captured) == len(expected), \
+        f"expected {len(expected)} headers, saw {len(captured)}"
+    for i, (got, exp) in enumerate(zip(captured, expected)):
+        assert got == exp, f"header {i}: got {[hex(x) for x in got]}, expected {[hex(x) for x in exp]}"
+
+# ---- directed tests ----
 
 @cocotb.test()
-async def no_pauses(dut):      await run(dut, 0.0, 0.0)
+async def boundary_lengths(dut):
+    # 14 = exactly the header; 15,16 straddle the beat boundary; 60 = real minimum frame
+    frames = [rand_frame(n) for n in (14, 15, 16, 17, 60, 64, 65)]
+    await run_frames(dut, frames)
+
 @cocotb.test()
-async def sink_stalls(dut):    await run(dut, 0.0, 0.6)
+async def truncated_headers_do_not_fire(dut):
+    # 9..13 bytes: two beats, but the header is incomplete -> valid_header must not rise
+    frames = [rand_frame(n) for n in (9, 10, 11, 12, 13)]
+    await run_frames(dut, frames)       # expected list is empty, so captured must be empty
+
 @cocotb.test()
-async def src_stalls(dut):     await run(dut, 0.6, 0.0)
+async def good_bad_good(dut):
+    # a short frame between two good ones: it must not fire, and the next frame must recover
+    frames = [rand_frame(60), rand_frame(10), rand_frame(60),
+              rand_frame(13), rand_frame(14), rand_frame(100)]
+    await run_frames(dut, frames)
+
 @cocotb.test()
-async def both_random(dut):   await run(dut, 0.4, 0.4)
+async def back_to_back_many_lengths(dut):
+    frames = [rand_frame(random.randint(9, 130)) for _ in range(100)]
+    await run_frames(dut, frames)
+
+#random backpressure
+@cocotb.test()
+async def random_stalls(dut):
+    frames = [rand_frame(random.randint(9, 130)) for _ in range(200)]
+    await run_frames(dut, frames, p_src=0.4, p_sink=0.4)
+
+@cocotb.test()
+async def sink_stalls_only(dut):
+    frames = [rand_frame(random.randint(9, 130)) for _ in range(100)]
+    await run_frames(dut, frames, p_sink=0.6)

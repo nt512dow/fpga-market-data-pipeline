@@ -19,6 +19,8 @@ module ethernet_header_extractor #(parameter BEAT_SIZE = 64) (
     output reg [15:0] ether_type,
     output reg valid_header
 );
+    //contract: fields are valid only while valid_header is 1; frames are at least 9 bytes; the flag stays high until the next frame’s beat 0.
+
     //pass through 
     assign m_axis_tdata  = s_axis_tdata;
     assign m_axis_tkeep  = s_axis_tkeep;
@@ -76,11 +78,10 @@ module ethernet_header_extractor #(parameter BEAT_SIZE = 64) (
         if (reset) begin
             valid_header <= 0;
         end else if (transfer_happening) begin
-            if (beat_count == 1) begin
+            if (beat_count == 1 && s_axis_tkeep[5:0] == 6'b111111) begin
                 valid_header <= 1;
-            end else if (beat_count == 0 && !s_axis_tlast) begin
-                //this keeps the valid_header flag high for as long as possible
-                //avoiding a situation where the flag drops just because the beat ends
+            end else if (beat_count == 0) begin
+            //clear on the first beat of the next transmission
                 valid_header <= 0;
             end
         end

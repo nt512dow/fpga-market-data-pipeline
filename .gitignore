@@ -10,3 +10,5 @@ __pycache__/
 synth/build/
 
 .vscode/
+
+obj_dir/
