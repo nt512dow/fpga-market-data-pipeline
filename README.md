@@ -28,3 +28,10 @@ All run with DATA_WIDTH=64 using Yosys and ECP5, combinational input-to-output p
 | LUT4s | FFs | Fmax after Routing/MHz | Critical Path                                 |
 |-------|-----|------------------------|-----------------------------------------------|
 | 362   | 371 | 159.03                 | checksum to ok_ip in ip_header_extractor      |
+
+
+# Ethernet, IP, and UDP Header Extractor with Realigner Tests
+
+| LUT4s | FFs | Fmax after Routing/MHz | Critical Path                                 |
+|-------|-----|------------------------|-----------------------------------------------|
+| 432   | 552 | 154.46                 | checksum to checksum in ip_header_extractor   |
