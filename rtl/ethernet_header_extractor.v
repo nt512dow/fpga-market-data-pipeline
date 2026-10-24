@@ -20,6 +20,7 @@ module ethernet_header_extractor #(parameter BEAT_SIZE = 64) (
     output reg valid_header
 );
     //contract: fields are valid only while valid_header is 1; frames are at least 9 bytes; the flag stays high until the next frame’s beat 0.
+    //ethertype check is only done in the ip stage, so only valid_header is present here
 
     //pass through 
     assign m_axis_tdata  = s_axis_tdata;
