@@ -18,6 +18,7 @@ flowchart LR
     ETH -. "valid_header, ether_type" .-> IP
     IP -. "valid_ip, ok_ip" .-> UDP
     UDP -. "valid_udp, ok_udp" .-> RE
+    UDP -. "valid_udp, ok_udp" .-> ITCH
 ```
 
 Each stage passes the stream through unchanged, captures its header fields,
@@ -42,7 +43,7 @@ downstream discards the frame if `tuser = 1`.
 | IPv4 header extractor | done | done | done |
 | UDP header extractor | done | done | done |
 | Realigner | done | done | done |
-| ITCH parser | planned | | |
+| ITCH parser | done | done | done |
 
 ## Running the tests
 
@@ -112,3 +113,9 @@ All run with DATA_WIDTH=64 using Yosys and ECP5, combinational input-to-output p
 | LUT4s | FFs | Fmax after Routing/MHz | Critical Path                                 |
 |-------|-----|------------------------|-----------------------------------------------|
 | 432   | 552 | 154.46                 | checksum to checksum in ip_header_extractor   |
+
+# Whole Pipeline: Ethernet, IP, UDP, Realigner, and MOLDUDP64 Header Extractors with ITCH Parser
+
+| LUT4s.  | FFs  | Fmax after Routing/MHz | Critical Path                                           |
+|---------|------|------------------------|---------------------------------------------------------|
+| 10080   | 1559 | 45.75                  | buffer_byte_count to data_buffer in ITCH Parser gearbox |

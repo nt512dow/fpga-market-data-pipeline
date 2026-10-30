@@ -20,9 +20,9 @@ module realigner #(parameter BEAT_SIZE = 64) (
 );
 // contract: we strip away all headers, keeping only the payload
 // we shift the payload bytes to the correct lanes, with the most signifcant byte at lane 0
-// we need to wait for beat 7 to confirm that all headers are fine, we then set m_axis_tuser = !(ok_udp && valid_udp)
+// we need to wait for beat 7 to confirm that all headers are fine, we then set m_axis_tuser = !(ok_udp && valid_udp) on tlast
 // downstream to discard if m_axis_tuser = 1 on tlast
-// we assume a minimum payload of 20 bytes as per MoldUDP64, so packet will end later than beat 7
+// we assume a minimum payload of 20 bytes as per MoldUDP64, so packet will end later than beat 6
 // valid_udp and ok_udp are both required because of stale state: if ok_udp == 0, we don't know if the verdict is not out yet or if it is actually a bad beat
 
     wire out_free;
