@@ -119,3 +119,22 @@ All run with DATA_WIDTH=64 using Yosys and ECP5, combinational input-to-output p
 | LUT4s.  | FFs  | Fmax after Routing/MHz | Critical Path                                           |
 |---------|------|------------------------|---------------------------------------------------------|
 | 10080   | 1559 | 45.75                  | buffer_byte_count to data_buffer in ITCH Parser gearbox |
+
+
+We note that the performance has dropped significantly and the resources used has increased substantially. Considering the critical path and the timing split between logic and routing (6.18 ns logic, 15.68 ns routing), the critical path has to do with the gearbox. 
+
+Considering data_buffer and buffer_byte_count: 
+```verilog
+wire [511:0] total_data_buffer = data_buffer | {448'd0, received_data} << {buffer_byte_count, 3'b000};
+
+//some lines later, in a sequential always block
+data_buffer <= total_data_buffer >> {bytes_consumed, 3'b000};
+```
+We note the following:
+1. A barrel shifter is used to create total_data_buffer at the correct byte offset
+2. Another barrel shifter is used to register data_buffer before the next clock edge
+3. Both barrel shifters shift by a variable number of bytes.
+
+This variable number of bytes means that we require many stages of muxes to correctly evaluate the shift. If we were shifting by any number from 0 to 511 bits, we would require 9 stages of multiplexers, but since we are shifting by bytes, we will require log2(512/8) = 6 stages of multiplexers. Each stage operates across the wide data path so the mux networks can be substantial. Having two of these variable shifts contribute significantly to the critical path.
+
+In order to fix this, we have to abandon the shifting architechture entirely if we want to get anywhere near 150 MHz. Instead of shifting data_buffer to get data aligned at position 0, we can consider shifting our position instead. This can be done with a pointer which points to where we should be reading from and a circular data buffer that wraps around. In this case, we should be careful with modular arithmetic, data buffer size and reading fields that cross the end of the buffer. But with a power-of-two buffer size, we can use bit masking to efficiently implement pointer wrapping. With a maximum message length of 50 bytes, a 512-bit circular data buffer should be adequate.
