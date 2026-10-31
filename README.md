@@ -1,9 +1,9 @@
 # FPGA Market Data Pipeline
 
-A low-latency receive path for exchange market data, written in Verilog.
+A attempt at a low-latency receive path for exchange market data, written in Verilog.
 It takes raw Ethernet frames on a 64-bit AXI-Stream bus, checks the headers
-as the bytes stream past (cut-through), and outputs the UDP payload starting
-at lane 0. A Nasdaq ITCH 5.0 parser is the next stage.
+as the bytes stream past (cut-through), and realigns the UDP payload to start
+at lane 0 before feeding into a Nasdaq ITCH 5.0 parser.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ Each stage passes the stream through unchanged, captures its header fields,
 and raises a valid/ok flag once its checks are complete. Verdicts are chained
 (`ok_udp` includes `ok_ip`, which includes the Ethernet check). The realigner
 delivers the final verdict on `tuser` with the last beat of each frame, so
-downstream discards the frame if `tuser = 1`.
+downstream discards the frame if `tuser = 1` or `!(ok_udp && valid_udp)`.
 
 ## Design assumptions
 
